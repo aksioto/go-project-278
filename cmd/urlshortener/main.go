@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,7 +9,7 @@ import (
 
 const serverAddr = ":8080"
 
-func main() {
+func newRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
@@ -17,7 +17,13 @@ func main() {
 		c.String(http.StatusOK, "pong")
 	})
 
+	return router
+}
+
+func main() {
+	router := newRouter()
+
 	if err := router.Run(serverAddr); err != nil {
-		panic(fmt.Errorf("run server: %w", err))
+		log.Fatalf("run server: %v", err)
 	}
 }

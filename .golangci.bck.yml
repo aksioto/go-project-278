@@ -1,0 +1,70 @@
+run:
+  timeout: 3m
+  tests: true
+
+linters:
+  enable:
+    # База
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - typecheck
+    - gosimple
+
+    # HTTP / ресурсы
+    - bodyclose
+    - nilerr
+
+    # Форматирование
+    - gofmt
+    - goimports
+
+    # Стиль
+    - revive
+    - asciicheck
+    - prealloc
+
+  disable:
+    # Всё ещё без фанатизма
+    - gocyclo
+    - funlen
+    - lll
+    - wsl
+    - exhaustive
+    - dupl
+    - godot
+
+linters-settings:
+  revive:
+    severity: warning
+    rules:
+      - name: var-naming
+      - name: receiver-naming
+      - name: error-strings
+      - name: if-return
+      - name: early-return
+      - name: package-comments
+        disabled: true
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable:
+      - shadow
+
+  goimports:
+    local-prefixes: urlshortener
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - bodyclose
