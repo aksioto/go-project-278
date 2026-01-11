@@ -75,6 +75,31 @@ func (r *LinkPostgres) List(ctx context.Context) ([]link.Link, error) {
 	return links, nil
 }
 
+func (r *LinkPostgres) ListPaginated(ctx context.Context, limit, offset int32) ([]link.Link, error) {
+	rows, err := r.queries.ListLinksPaginated(ctx, sqlc.ListLinksPaginatedParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list links paginated: %w", err)
+	}
+
+	links := make([]link.Link, 0, len(rows))
+	for _, row := range rows {
+		links = append(links, *toLink(row))
+	}
+
+	return links, nil
+}
+
+func (r *LinkPostgres) Count(ctx context.Context) (int64, error) {
+	count, err := r.queries.CountLinks(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count links: %w", err)
+	}
+	return count, nil
+}
+
 func (r *LinkPostgres) Update(ctx context.Context, id int64, originalURL, shortName string) (*link.Link, error) {
 	row, err := r.queries.UpdateLink(ctx, sqlc.UpdateLinkParams{
 		ID:          id,

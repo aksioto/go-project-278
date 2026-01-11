@@ -13,6 +13,15 @@ SELECT id, original_url, short_name, created_at
 FROM links
 ORDER BY id;
 
+-- name: ListLinksPaginated :many
+SELECT id, original_url, short_name, created_at
+FROM links
+ORDER BY id
+LIMIT $1 OFFSET $2;
+
+-- name: CountLinks :one
+SELECT COUNT(*) FROM links;
+
 -- name: UpdateLink :one
 UPDATE links
 SET original_url = $2,

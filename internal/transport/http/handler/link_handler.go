@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -12,6 +14,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const (
+	defaultPageSize int32 = 50
+	maxPageSize     int32 = 200
+)
+
+type paginationRange struct {
+	start int32
+	end   int32
+}
 
 type LinkHandler struct {
 	service linkusecase.Service
@@ -76,15 +88,64 @@ func (h *LinkHandler) GetLink(c *gin.Context) {
 	c.JSON(http.StatusOK, mapper.ToLinkResponse(*domainLink, h.baseURL))
 }
 
+func (h *LinkHandler) parseRange(rangeParam string) (paginationRange, error) {
+	if rangeParam == "" {
+		return paginationRange{start: 0, end: defaultPageSize}, nil
+	}
+
+	var rangeValues []int32
+	if err := json.Unmarshal([]byte(rangeParam), &rangeValues); err != nil || len(rangeValues) != 2 {
+		return paginationRange{}, fmt.Errorf("invalid range format: %s", rangeParam)
+	}
+
+	start, end := rangeValues[0], rangeValues[1]
+	if start < 0 || end < 0 || start >= end {
+		return paginationRange{}, fmt.Errorf("invalid range: %s", rangeParam)
+	}
+
+	if span := end - start; span > maxPageSize {
+		end = start + maxPageSize
+	}
+
+	return paginationRange{start: start, end: end}, nil
+}
+
 func (h *LinkHandler) ListLinks(c *gin.Context) {
-	links, err := h.service.ListLinks(c.Request.Context())
+	rangeParam := c.Query("range")
+	pRange, err := h.parseRange(rangeParam)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		total, countErr := h.service.CountLinks(c.Request.Context())
+		if countErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": countErr.Error()})
+			return
+		}
+		c.Header("Content-Range", fmt.Sprintf("links */%d", total))
+		c.JSON(http.StatusRequestedRangeNotSatisfiable, gin.H{"error": err.Error()})
 		return
 	}
 
-	response := mapper.ToLinkResponseList(links, h.baseURL)
-	c.JSON(http.StatusOK, response)
+	limit := pRange.end - pRange.start
+	offset := pRange.start
+
+	result, err := h.service.ListLinksPaginated(c.Request.Context(), limit, offset)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	actualEnd := offset + int32(len(result.Links)) - 1
+	if len(result.Links) == 0 {
+		actualEnd = offset
+	}
+	c.Header("Content-Range", fmt.Sprintf("links %d-%d/%d", pRange.start, actualEnd, result.Total))
+
+	response := mapper.ToLinkResponseList(result.Links, h.baseURL)
+	status := http.StatusOK
+	if rangeParam != "" {
+		status = http.StatusPartialContent
+	}
+
+	c.JSON(status, response)
 }
 
 func (h *LinkHandler) UpdateLink(c *gin.Context) {

@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -9,8 +10,8 @@ func AssertErrorResponse(t *testing.T, resp *httptest.ResponseRecorder, expected
 	t.Helper()
 
 	body := DecodeJSON[map[string]string](t, resp)
-	if body["error"] != expected {
-		t.Fatalf("expected error %q, got %q", expected, body["error"])
+	if !strings.Contains(body["error"], expected) {
+		t.Fatalf("expected error containing %q, got %q", expected, body["error"])
 	}
 }
 

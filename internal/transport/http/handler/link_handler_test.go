@@ -201,23 +201,27 @@ func TestGetLink(t *testing.T) {
 
 func TestListLinks(t *testing.T) {
 	tests := []struct {
-		name           string
-		mockExpect     func(*linkusecase.MockService)
-		expectedStatus int
-		assert         func(t *testing.T, resp *httptest.ResponseRecorder)
+		name                 string
+		rangeParam           string
+		mockExpect           func(*linkusecase.MockService)
+		expectedStatus       int
+		expectedContentRange string
+		assert               func(t *testing.T, resp *httptest.ResponseRecorder)
 	}{
 		{
-			name: "success",
+			name:       "success without range (default pagination)",
+			rangeParam: "",
 			mockExpect: func(s *linkusecase.MockService) {
 				results := []link.Link{
 					makeLink(1, "https://example.com/1", "one"),
 					makeLink(2, "https://example.com/2", "two"),
 				}
 				s.EXPECT().
-					ListLinks(gomock.Any()).
-					Return(results, nil)
+					ListLinksPaginated(gomock.Any(), defaultPageSize, int32(0)).
+					Return(&linkusecase.ListResult{Links: results, Total: 2}, nil)
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus:       http.StatusOK,
+			expectedContentRange: "links 0-1/2",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.LinkResponse{
 					makeLinkDTO(1, "https://example.com/1", "one"),
@@ -227,10 +231,133 @@ func TestListLinks(t *testing.T) {
 			},
 		},
 		{
-			name: "service error",
+			name:       "with range parameter",
+			rangeParam: "[0,10]",
+			mockExpect: func(s *linkusecase.MockService) {
+				results := []link.Link{
+					makeLink(1, "https://example.com/1", "one"),
+					makeLink(2, "https://example.com/2", "two"),
+				}
+				s.EXPECT().
+					ListLinksPaginated(gomock.Any(), int32(10), int32(0)).
+					Return(&linkusecase.ListResult{Links: results, Total: 42}, nil)
+			},
+			expectedStatus:       http.StatusPartialContent,
+			expectedContentRange: "links 0-1/42",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				expected := []dto.LinkResponse{
+					makeLinkDTO(1, "https://example.com/1", "one"),
+					makeLinkDTO(2, "https://example.com/2", "two"),
+				}
+				testutil.AssertJSON(t, resp, expected)
+			},
+		},
+		{
+			name:       "second page",
+			rangeParam: "[5,7]",
+			mockExpect: func(s *linkusecase.MockService) {
+				results := []link.Link{
+					makeLink(6, "https://example.com/6", "six"),
+					makeLink(7, "https://example.com/7", "seven"),
+				}
+				s.EXPECT().
+					ListLinksPaginated(gomock.Any(), int32(2), int32(5)).
+					Return(&linkusecase.ListResult{Links: results, Total: 11}, nil)
+			},
+			expectedStatus:       http.StatusPartialContent,
+			expectedContentRange: "links 5-6/11",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				expected := []dto.LinkResponse{
+					makeLinkDTO(6, "https://example.com/6", "six"),
+					makeLinkDTO(7, "https://example.com/7", "seven"),
+				}
+				testutil.AssertJSON(t, resp, expected)
+			},
+		},
+		{
+			name:       "empty result",
+			rangeParam: "[100,110]",
 			mockExpect: func(s *linkusecase.MockService) {
 				s.EXPECT().
-					ListLinks(gomock.Any()).
+					ListLinksPaginated(gomock.Any(), int32(10), int32(100)).
+					Return(&linkusecase.ListResult{Links: []link.Link{}, Total: 42}, nil)
+			},
+			expectedStatus:       http.StatusPartialContent,
+			expectedContentRange: "links 100-100/42",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				expected := []dto.LinkResponse{}
+				testutil.AssertJSON(t, resp, expected)
+			},
+		},
+		{
+			name:       "invalid range format returns 416",
+			rangeParam: "invalid",
+			mockExpect: func(s *linkusecase.MockService) {
+				s.EXPECT().
+					CountLinks(gomock.Any()).
+					Return(int64(1), nil)
+			},
+			expectedStatus:       http.StatusRequestedRangeNotSatisfiable,
+			expectedContentRange: "links */1",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				testutil.AssertErrorResponse(t, resp, "invalid range")
+			},
+		},
+		{
+			name:       "negative or reversed range returns 416",
+			rangeParam: "[5,-1]",
+			mockExpect: func(s *linkusecase.MockService) {
+				s.EXPECT().
+					CountLinks(gomock.Any()).
+					Return(int64(42), nil)
+			},
+			expectedStatus:       http.StatusRequestedRangeNotSatisfiable,
+			expectedContentRange: "links */42",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				testutil.AssertErrorResponse(t, resp, "invalid range")
+			},
+		},
+		{
+			name:       "invalid range when count fails",
+			rangeParam: "[bad]",
+			mockExpect: func(s *linkusecase.MockService) {
+				s.EXPECT().
+					CountLinks(gomock.Any()).
+					Return(int64(0), errors.New("count failure"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				testutil.AssertErrorResponse(t, resp, "count failure")
+			},
+		},
+		{
+			name:       "range larger than max page size clamps limit",
+			rangeParam: "[0,500]",
+			mockExpect: func(s *linkusecase.MockService) {
+				results := []link.Link{
+					makeLink(1, "https://example.com/1", "one"),
+					makeLink(2, "https://example.com/2", "two"),
+				}
+				s.EXPECT().
+					ListLinksPaginated(gomock.Any(), maxPageSize, int32(0)).
+					Return(&linkusecase.ListResult{Links: results, Total: 500}, nil)
+			},
+			expectedStatus:       http.StatusPartialContent,
+			expectedContentRange: "links 0-1/500",
+			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				expected := []dto.LinkResponse{
+					makeLinkDTO(1, "https://example.com/1", "one"),
+					makeLinkDTO(2, "https://example.com/2", "two"),
+				}
+				testutil.AssertJSON(t, resp, expected)
+			},
+		},
+		{
+			name:       "service error",
+			rangeParam: "",
+			mockExpect: func(s *linkusecase.MockService) {
+				s.EXPECT().
+					ListLinksPaginated(gomock.Any(), defaultPageSize, int32(0)).
 					Return(nil, errors.New("db failure"))
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -244,8 +371,19 @@ func TestListLinks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter(t, tt.mockExpect)
 
-			resp := testutil.PerformRequest(t, router, http.MethodGet, "/api/links", nil)
+			path := "/api/links"
+			if tt.rangeParam != "" {
+				path += "?range=" + tt.rangeParam
+			}
+			resp := testutil.PerformRequest(t, router, http.MethodGet, path, nil)
 			testutil.AssertResponse(t, resp, tt.expectedStatus, tt.assert)
+
+			if tt.expectedContentRange != "" {
+				got := resp.Header().Get("Content-Range")
+				if got != tt.expectedContentRange {
+					t.Fatalf("expected Content-Range %q, got %q", tt.expectedContentRange, got)
+				}
+			}
 		})
 	}
 }
