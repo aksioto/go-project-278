@@ -2,9 +2,10 @@ package config
 
 import (
 	"errors"
+	"log"
+
 	"github.com/caarlos0/env/v10"
 	"github.com/joho/godotenv"
-	"log"
 )
 
 const (

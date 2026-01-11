@@ -2,6 +2,7 @@ package middleware
 
 import (
 	sentryinfra "code/internal/infra/sentry"
+
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 )

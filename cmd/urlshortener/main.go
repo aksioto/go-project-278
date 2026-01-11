@@ -9,12 +9,14 @@ import (
 	linkusecase "code/internal/usecase/link"
 	"context"
 	"fmt"
-	"github.com/getsentry/sentry-go"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+
 	sentryinfra "code/internal/infra/sentry"
+
 	"github.com/gin-gonic/gin"
 )
 

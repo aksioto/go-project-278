@@ -1,4 +1,4 @@
-package http
+package httptransport
 
 import (
 	"code/internal/transport/http/handler"
