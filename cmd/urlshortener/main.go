@@ -1,58 +1,84 @@
 package main
 
 import (
+	"code/internal/config"
+	"code/internal/db/repository"
+	"code/internal/infra/postgres"
+	transportHTTP "code/internal/transport/http"
+	"code/internal/transport/http/middleware"
+	linkusecase "code/internal/usecase/link"
+	"context"
+	"fmt"
+	"github.com/getsentry/sentry-go"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/getsentry/sentry-go"
-	sentrygin "github.com/getsentry/sentry-go/gin"
+	sentryinfra "code/internal/infra/sentry"
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	serverAddr = ":8080"
-	sentryDSN  = "https://6a9ff8cb0669df014f75f2c761fc865c@o4510642877169664.ingest.de.sentry.io/4510642882150480"
-)
+func main() {
+	// Config
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
-func initSentry() {
-	if err := sentry.Init(sentry.ClientOptions{
-		Dsn:              sentryDSN,
-		TracesSampleRate: 1.0, // в проде обычно 0.1–0.2
-	}); err != nil {
+	if err = cfg.Validate(); err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
+	}
+
+	// Sentry
+	sentryClient, err := sentryinfra.Init(
+		sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			TracesSampleRate: cfg.SentrySampleRate,
+			Environment:      cfg.Env,
+		},
+		time.Duration(cfg.SentryFlushTimeoutMs)*time.Millisecond,
+	)
+	if err != nil {
 		log.Fatalf("sentry init failed: %v", err)
 	}
-}
+	defer sentryClient.Close()
 
-func newRouter() *gin.Engine {
+	// Database
+	ctx := context.Background()
+	dbPool, err := postgres.NewPool(ctx, postgres.Config{
+		DatabaseURL: cfg.DatabaseURL,
+		MaxConns:    cfg.MaxConns,
+		IdleTimeMs:  cfg.IdleTimeMs,
+	})
+	if err != nil {
+		log.Fatalf("failed to create db pool: %v", err)
+	}
+	defer dbPool.Close()
+
+	// Init repository + usecase
+	linkRepo := repository.NewLinkPostgres(dbPool)
+	linkService := linkusecase.NewService(linkRepo)
+
+	// Setup Gin router + middleware
+	if cfg.IsProd() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	router := gin.New()
-
 	router.Use(
 		gin.Logger(),
 		gin.Recovery(),
-		sentrygin.New(sentrygin.Options{
-			Repanic: true, // чтобы gin.Recovery тоже отработал
-		}),
+		middleware.SentryMiddleware(sentryClient),
 	)
 
+	// Healthcheck
 	router.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")
 	})
 
-	router.GET("/panic", func(c *gin.Context) {
-		panic("test sentry panic")
-	})
+	transportHTTP.SetupRoutes(router, linkService, cfg.BaseURL)
 
-	return router
-}
-
-func main() {
-	initSentry()
-	defer sentry.Flush(2 * time.Second)
-
-	router := newRouter()
-
-	if err := router.Run(serverAddr); err != nil {
-		log.Fatalf("run server: %v", err)
+	addr := fmt.Sprintf(":%s", cfg.Port)
+	if err := router.Run(addr); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
