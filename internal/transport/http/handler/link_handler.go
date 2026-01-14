@@ -90,7 +90,7 @@ func (h *LinkHandler) GetLink(c *gin.Context) {
 
 func (h *LinkHandler) parseRange(rangeParam string) (paginationRange, error) {
 	if rangeParam == "" {
-		return paginationRange{start: 0, end: defaultPageSize}, nil
+		return paginationRange{start: 0, end: defaultPageSize - 1}, nil
 	}
 
 	var rangeValues []int32
@@ -99,12 +99,12 @@ func (h *LinkHandler) parseRange(rangeParam string) (paginationRange, error) {
 	}
 
 	start, end := rangeValues[0], rangeValues[1]
-	if start < 0 || end < 0 || start >= end {
+	if start < 0 || end < 0 || start > end {
 		return paginationRange{}, fmt.Errorf("invalid range: %s", rangeParam)
 	}
 
-	if span := end - start; span > maxPageSize {
-		end = start + maxPageSize
+	if span := end - start + 1; span > maxPageSize {
+		end = start + maxPageSize - 1
 	}
 
 	return paginationRange{start: start, end: end}, nil
@@ -124,7 +124,7 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 		return
 	}
 
-	limit := pRange.end - pRange.start
+	limit := pRange.end - pRange.start + 1
 	offset := pRange.start
 
 	result, err := h.service.ListLinksPaginated(c.Request.Context(), limit, offset)

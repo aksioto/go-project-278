@@ -232,7 +232,7 @@ func TestListLinks(t *testing.T) {
 		},
 		{
 			name:       "with range parameter",
-			rangeParam: "[0,10]",
+			rangeParam: "[0,9]",
 			mockExpect: func(s *linkusecase.MockService) {
 				results := []link.Link{
 					makeLink(1, "https://example.com/1", "one"),
@@ -254,7 +254,7 @@ func TestListLinks(t *testing.T) {
 		},
 		{
 			name:       "second page",
-			rangeParam: "[5,7]",
+			rangeParam: "[5,6]",
 			mockExpect: func(s *linkusecase.MockService) {
 				results := []link.Link{
 					makeLink(6, "https://example.com/6", "six"),
