@@ -70,6 +70,7 @@ func main() {
 		gin.Logger(),
 		gin.Recovery(),
 		middleware.SentryMiddleware(sentryClient),
+		middleware.CORSMiddleware(cfg.AllowedOrigins...),
 	)
 
 	// Healthcheck

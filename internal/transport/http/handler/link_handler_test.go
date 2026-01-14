@@ -276,7 +276,7 @@ func TestListLinks(t *testing.T) {
 		},
 		{
 			name:       "empty result",
-			rangeParam: "[100,110]",
+			rangeParam: "[100,109]",
 			mockExpect: func(s *linkusecase.MockService) {
 				s.EXPECT().
 					ListLinksPaginated(gomock.Any(), int32(10), int32(100)).

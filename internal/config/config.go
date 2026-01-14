@@ -20,6 +20,8 @@ type Config struct {
 	Port    string `env:"PORT" envDefault:"8080"`
 	BaseURL string `env:"BASE_URL,required"`
 
+	AllowedOrigins []string `env:"ALLOWED_ORIGINS" envDefault:"http://localhost:5173" envSeparator:","`
+
 	DatabaseURL string `env:"DATABASE_URL,required"`
 	MaxConns    int32  `env:"DATABASE_MAX_CONNS" envDefault:"10"`
 	IdleTimeMs  int    `env:"DATABASE_IDLE_TIME_MS" envDefault:"30000"`
