@@ -35,6 +35,21 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// CountLinkVisits mocks base method.
+func (m *MockService) CountLinkVisits(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountLinkVisits", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountLinkVisits indicates an expected call of CountLinkVisits.
+func (mr *MockServiceMockRecorder) CountLinkVisits(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountLinkVisits", reflect.TypeOf((*MockService)(nil).CountLinkVisits), ctx)
+}
+
 // CountLinks mocks base method.
 func (m *MockService) CountLinks(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -65,6 +80,21 @@ func (mr *MockServiceMockRecorder) CreateLink(ctx, originalURL, shortName interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLink", reflect.TypeOf((*MockService)(nil).CreateLink), ctx, originalURL, shortName)
 }
 
+// CreateLinkVisit mocks base method.
+func (m *MockService) CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateLinkVisit", ctx, visit)
+	ret0, _ := ret[0].(*link.Visit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateLinkVisit indicates an expected call of CreateLinkVisit.
+func (mr *MockServiceMockRecorder) CreateLinkVisit(ctx, visit interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLinkVisit", reflect.TypeOf((*MockService)(nil).CreateLinkVisit), ctx, visit)
+}
+
 // DeleteLink mocks base method.
 func (m *MockService) DeleteLink(ctx context.Context, id int64) error {
 	m.ctrl.T.Helper()
@@ -92,6 +122,36 @@ func (m *MockService) GetLink(ctx context.Context, id int64) (*link.Link, error)
 func (mr *MockServiceMockRecorder) GetLink(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLink", reflect.TypeOf((*MockService)(nil).GetLink), ctx, id)
+}
+
+// GetLinkByShortName mocks base method.
+func (m *MockService) GetLinkByShortName(ctx context.Context, shortName string) (*link.Link, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLinkByShortName", ctx, shortName)
+	ret0, _ := ret[0].(*link.Link)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLinkByShortName indicates an expected call of GetLinkByShortName.
+func (mr *MockServiceMockRecorder) GetLinkByShortName(ctx, shortName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLinkByShortName", reflect.TypeOf((*MockService)(nil).GetLinkByShortName), ctx, shortName)
+}
+
+// ListLinkVisitsPaginated mocks base method.
+func (m *MockService) ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListLinkVisitsPaginated", ctx, limit, offset)
+	ret0, _ := ret[0].(*VisitListResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListLinkVisitsPaginated indicates an expected call of ListLinkVisitsPaginated.
+func (mr *MockServiceMockRecorder) ListLinkVisitsPaginated(ctx, limit, offset interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLinkVisitsPaginated", reflect.TypeOf((*MockService)(nil).ListLinkVisitsPaginated), ctx, limit, offset)
 }
 
 // ListLinks mocks base method.

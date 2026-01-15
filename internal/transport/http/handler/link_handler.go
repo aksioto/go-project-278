@@ -148,6 +148,44 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 	c.JSON(status, response)
 }
 
+func (h *LinkHandler) ListLinkVisits(c *gin.Context) {
+	rangeParam := c.Query("range")
+	pRange, err := h.parseRange(rangeParam)
+	if err != nil {
+		total, countErr := h.service.CountLinkVisits(c.Request.Context())
+		if countErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": countErr.Error()})
+			return
+		}
+		c.Header("Content-Range", fmt.Sprintf("link_visits */%d", total))
+		c.JSON(http.StatusRequestedRangeNotSatisfiable, gin.H{"error": err.Error()})
+		return
+	}
+
+	limit := pRange.end - pRange.start + 1
+	offset := pRange.start
+
+	result, err := h.service.ListLinkVisitsPaginated(c.Request.Context(), limit, offset)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	actualEnd := offset + int32(len(result.Visits)) - 1
+	if len(result.Visits) == 0 {
+		actualEnd = offset
+	}
+	c.Header("Content-Range", fmt.Sprintf("link_visits %d-%d/%d", pRange.start, actualEnd, result.Total))
+
+	response := mapper.ToVisitResponseList(result.Visits)
+	status := http.StatusOK
+	if rangeParam != "" {
+		status = http.StatusPartialContent
+	}
+
+	c.JSON(status, response)
+}
+
 func (h *LinkHandler) UpdateLink(c *gin.Context) {
 	id, ok := h.parseID(c)
 	if !ok {
@@ -181,4 +219,30 @@ func (h *LinkHandler) DeleteLink(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *LinkHandler) RedirectToOriginalURL(c *gin.Context) {
+	code := c.Param("code")
+
+	domainLink, err := h.service.GetLinkByShortName(c.Request.Context(), code)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	status := http.StatusFound
+	visit := link.Visit{
+		LinkID:    domainLink.ID,
+		IP:        c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+		Referer:   c.Request.Referer(),
+		Status:    status,
+	}
+
+	if _, err := h.service.CreateLinkVisit(c.Request.Context(), visit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Redirect(status, domainLink.OriginalURL)
 }

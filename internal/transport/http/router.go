@@ -20,5 +20,10 @@ func SetupRoutes(router *gin.Engine, service linkusecase.Service, baseURL string
 			links.PUT("/:id", linkHandler.UpdateLink)
 			links.DELETE("/:id", linkHandler.DeleteLink)
 		}
+
+		api.GET("/link_visits", linkHandler.ListLinkVisits)
 	}
+
+	router.GET("/r/:code", linkHandler.RedirectToOriginalURL)
+
 }

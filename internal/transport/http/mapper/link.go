@@ -24,3 +24,23 @@ func ToLinkResponseList(links []link.Link, baseURL string) []dto.LinkResponse {
 	}
 	return result
 }
+
+func ToVisitResponse(v link.Visit) dto.VisitResponse {
+	return dto.VisitResponse{
+		ID:        v.ID,
+		LinkID:    v.LinkID,
+		IP:        v.IP,
+		UserAgent: v.UserAgent,
+		Referer:   v.Referer,
+		Status:    v.Status,
+		CreatedAt: v.CreatedAt,
+	}
+}
+
+func ToVisitResponseList(visits []link.Visit) []dto.VisitResponse {
+	result := make([]dto.VisitResponse, 0, len(visits))
+	for _, v := range visits {
+		result = append(result, ToVisitResponse(v))
+	}
+	return result
+}

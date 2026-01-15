@@ -34,6 +34,23 @@ func toLink(row sqlc.Link) *link.Link {
 	}
 }
 
+func toVisit(row sqlc.LinkVisit) *link.Visit {
+	referer := ""
+	if row.Referer.Valid {
+		referer = row.Referer.String
+	}
+
+	return &link.Visit{
+		ID:        row.ID,
+		LinkID:    row.LinkID,
+		IP:        row.Ip,
+		UserAgent: row.UserAgent,
+		Referer:   referer,
+		Status:    int(row.Status),
+		CreatedAt: row.CreatedAt.Time,
+	}
+}
+
 func (r *LinkPostgres) Create(ctx context.Context, originalURL, shortName string) (*link.Link, error) {
 	row, err := r.queries.CreateLink(ctx, sqlc.CreateLinkParams{
 		OriginalUrl: originalURL,
@@ -44,6 +61,18 @@ func (r *LinkPostgres) Create(ctx context.Context, originalURL, shortName string
 			return nil, link.ErrShortNameTaken
 		}
 		return nil, fmt.Errorf("create link: %w", err)
+	}
+
+	return toLink(row), nil
+}
+
+func (r *LinkPostgres) GetByShortName(ctx context.Context, shortName string) (*link.Link, error) {
+	row, err := r.queries.GetLinkByShortName(ctx, shortName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, link.ErrNotFound
+		}
+		return nil, fmt.Errorf("get link by short name: %w", err)
 	}
 
 	return toLink(row), nil
@@ -124,6 +153,51 @@ func (r *LinkPostgres) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete link: %w", err)
 	}
 	return nil
+}
+
+func (r *LinkPostgres) CreateVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
+	var referer string
+	if visit.Referer != "" {
+		referer = visit.Referer
+	}
+
+	row, err := r.queries.CreateLinkVisit(ctx, sqlc.CreateLinkVisitParams{
+		LinkID:    visit.LinkID,
+		Ip:        visit.IP,
+		UserAgent: visit.UserAgent,
+		Column4:   referer,
+		Status:    int32(visit.Status),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create link visit: %w", err)
+	}
+
+	return toVisit(row), nil
+}
+
+func (r *LinkPostgres) ListVisitsPaginated(ctx context.Context, limit, offset int32) ([]link.Visit, error) {
+	rows, err := r.queries.ListLinkVisitsPaginated(ctx, sqlc.ListLinkVisitsPaginatedParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list link visits paginated: %w", err)
+	}
+
+	visits := make([]link.Visit, 0, len(rows))
+	for _, row := range rows {
+		visits = append(visits, *toVisit(row))
+	}
+
+	return visits, nil
+}
+
+func (r *LinkPostgres) CountVisits(ctx context.Context) (int64, error) {
+	count, err := r.queries.CountLinkVisits(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count link visits: %w", err)
+	}
+	return count, nil
 }
 
 func isUniqueViolation(err error) bool {

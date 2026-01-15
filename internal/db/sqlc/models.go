@@ -14,3 +14,13 @@ type Link struct {
 	ShortName   string
 	CreatedAt   pgtype.Timestamptz
 }
+
+type LinkVisit struct {
+	ID        int64
+	LinkID    int64
+	Ip        string
+	UserAgent string
+	Referer   pgtype.Text
+	Status    int32
+	CreatedAt pgtype.Timestamptz
+}

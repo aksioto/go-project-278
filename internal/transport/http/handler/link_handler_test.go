@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"code/internal/testutil"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"code/internal/domain/link"
+	"code/internal/testutil"
 	"code/internal/transport/http/dto"
 	linkusecase "code/internal/usecase/link"
 
@@ -52,6 +52,30 @@ func makeLinkDTO(id int64, url, short string) dto.LinkResponse {
 	return linkToDTO(makeLink(id, url, short))
 }
 
+func makeVisit(id, linkID int64, ip, userAgent, referer string, status int) link.Visit {
+	return link.Visit{
+		ID:        id,
+		LinkID:    linkID,
+		IP:        ip,
+		UserAgent: userAgent,
+		Referer:   referer,
+		Status:    status,
+		CreatedAt: testTimestamp,
+	}
+}
+
+func visitToDTO(v link.Visit) dto.VisitResponse {
+	return dto.VisitResponse{
+		ID:        v.ID,
+		LinkID:    v.LinkID,
+		IP:        v.IP,
+		UserAgent: v.UserAgent,
+		Referer:   v.Referer,
+		Status:    v.Status,
+		CreatedAt: v.CreatedAt,
+	}
+}
+
 func setupTestRouter(t *testing.T, mockExpect func(*linkusecase.MockService)) *gin.Engine {
 	t.Helper()
 
@@ -64,6 +88,7 @@ func setupTestRouter(t *testing.T, mockExpect func(*linkusecase.MockService)) *g
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.TrustedPlatform = gin.PlatformCloudflare
 
 	linkHandler := NewLinkHandler(service, testutil.TestBaseURL)
 	api := router.Group("/api")
@@ -74,6 +99,9 @@ func setupTestRouter(t *testing.T, mockExpect func(*linkusecase.MockService)) *g
 	links.GET("/:id", linkHandler.GetLink)
 	links.PUT("/:id", linkHandler.UpdateLink)
 	links.DELETE("/:id", linkHandler.DeleteLink)
+
+	api.GET("/link_visits", linkHandler.ListLinkVisits)
+	router.GET("/r/:code", linkHandler.RedirectToOriginalURL)
 
 	return router
 }

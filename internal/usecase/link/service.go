@@ -17,14 +17,24 @@ type ListResult struct {
 	Total int64
 }
 
+type VisitListResult struct {
+	Visits []link.Visit
+	Total  int64
+}
+
 type Service interface {
 	CreateLink(ctx context.Context, originalURL, shortName string) (*link.Link, error)
 	GetLink(ctx context.Context, id int64) (*link.Link, error)
+	GetLinkByShortName(ctx context.Context, shortName string) (*link.Link, error)
 	ListLinks(ctx context.Context) ([]link.Link, error)
 	ListLinksPaginated(ctx context.Context, limit, offset int32) (*ListResult, error)
 	CountLinks(ctx context.Context) (int64, error)
 	UpdateLink(ctx context.Context, id int64, originalURL, shortName string) (*link.Link, error)
 	DeleteLink(ctx context.Context, id int64) error
+
+	CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error)
+	ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error)
+	CountLinkVisits(ctx context.Context) (int64, error)
 }
 
 type service struct {
@@ -60,6 +70,10 @@ func (s *service) GetLink(ctx context.Context, id int64) (*link.Link, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *service) GetLinkByShortName(ctx context.Context, shortName string) (*link.Link, error) {
+	return s.repo.GetByShortName(ctx, shortName)
+}
+
 func (s *service) ListLinks(ctx context.Context) ([]link.Link, error) {
 	return s.repo.List(ctx)
 }
@@ -91,6 +105,31 @@ func (s *service) DeleteLink(ctx context.Context, id int64) error {
 
 func (s *service) CountLinks(ctx context.Context) (int64, error) {
 	return s.repo.Count(ctx)
+}
+
+func (s *service) CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
+	return s.repo.CreateVisit(ctx, visit)
+}
+
+func (s *service) ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error) {
+	visits, err := s.repo.ListVisitsPaginated(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	total, err := s.repo.CountVisits(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &VisitListResult{
+		Visits: visits,
+		Total:  total,
+	}, nil
+}
+
+func (s *service) CountLinkVisits(ctx context.Context) (int64, error) {
+	return s.repo.CountVisits(ctx)
 }
 
 func (s *service) generateShortName() (string, error) {
