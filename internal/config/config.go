@@ -17,7 +17,8 @@ type Config struct {
 	Env         string `env:"ENV" envDefault:"dev"`
 	ServiceName string `env:"SERVICE_NAME,required"`
 
-	Port    string `env:"PORT" envDefault:"8080"`
+	Port    string `env:"PORT" envDefault:"80"`
+	AppPort string `env:"APP_PORT" envDefault:"8080"`
 	BaseURL string `env:"BASE_URL,required"`
 
 	AllowedOrigins []string `env:"ALLOWED_ORIGINS" envDefault:"http://localhost:5173" envSeparator:","`

@@ -80,8 +80,8 @@ func main() {
 
 	transportHTTP.SetupRoutes(router, linkService, cfg.BaseURL)
 
-	addr := fmt.Sprintf(":%s", cfg.Port)
-	if err := router.Run(addr); err != nil {
+	addr := fmt.Sprintf(":%s", cfg.AppPort)
+	if err = router.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
