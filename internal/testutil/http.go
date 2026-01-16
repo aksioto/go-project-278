@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func PerformRequest(t *testing.T, handler http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -17,9 +19,8 @@ func PerformRequestWithHeaders(t *testing.T, handler http.Handler, method, path 
 
 	var buf bytes.Buffer
 	if body != nil {
-		if err := json.NewEncoder(&buf).Encode(body); err != nil {
-			t.Fatalf("encode request body: %v", err)
-		}
+		err := json.NewEncoder(&buf).Encode(body)
+		require.NoError(t, err, "encode request body")
 	}
 
 	req := httptest.NewRequest(method, path, &buf)
@@ -35,22 +36,4 @@ func PerformRequestWithHeaders(t *testing.T, handler http.Handler, method, path 
 	handler.ServeHTTP(w, req)
 
 	return w
-}
-
-func AssertStatus(t *testing.T, got, want int) {
-	t.Helper()
-
-	if got != want {
-		t.Fatalf("expected status %d, got %d", want, got)
-	}
-}
-
-func AssertResponse(t *testing.T, resp *httptest.ResponseRecorder, status int, assert func(t *testing.T, resp *httptest.ResponseRecorder)) {
-	t.Helper()
-
-	AssertStatus(t, resp.Code, status)
-
-	if assert != nil {
-		assert(t, resp)
-	}
 }

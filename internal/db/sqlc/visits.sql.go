@@ -63,6 +63,23 @@ func (q *Queries) CreateLinkVisit(ctx context.Context, arg CreateLinkVisitParams
 	return i, err
 }
 
+const deleteLinkVisit = `-- name: DeleteLinkVisit :execrows
+DELETE FROM link_visits
+WHERE id = $1
+`
+
+// DeleteLinkVisit
+//
+//	DELETE FROM link_visits
+//	WHERE id = $1
+func (q *Queries) DeleteLinkVisit(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLinkVisit, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listLinkVisitsPaginated = `-- name: ListLinkVisitsPaginated :many
 SELECT id, link_id, ip, user_agent, referer, status, created_at
 FROM link_visits

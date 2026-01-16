@@ -4,13 +4,22 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"code/internal/domain/link"
 )
 
 //go:generate mockgen -source=service.go -destination=service_mock.go -package=link Service
+
+const (
+	defaultDBTimeout    = 5 * time.Second
+	maxShortNameRetries = 3
+	shortNameLength     = 8
+)
 
 type ListResult struct {
 	Links []link.Link
@@ -35,56 +44,85 @@ type Service interface {
 	CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error)
 	ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error)
 	CountLinkVisits(ctx context.Context) (int64, error)
+	DeleteLinkVisit(ctx context.Context, id int64) error
 }
 
 type service struct {
-	repo link.Repository
+	linkRepo  link.LinkRepository
+	visitRepo link.VisitRepository
+	logger    *slog.Logger
 }
 
 var _ Service = (*service)(nil)
 
-func NewService(repo link.Repository) Service {
+func NewService(linkRepo link.LinkRepository, visitRepo link.VisitRepository, logger *slog.Logger) *service {
 	return &service{
-		repo: repo,
+		linkRepo:  linkRepo,
+		visitRepo: visitRepo,
+		logger:    logger,
 	}
 }
 
 func (s *service) CreateLink(ctx context.Context, originalURL, shortName string) (*link.Link, error) {
-	if shortName == "" {
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+
+	if shortName != "" {
+		return s.linkRepo.Create(dbCtx, originalURL, shortName)
+	}
+
+	for i := 0; i < maxShortNameRetries; i++ {
 		generated, err := s.generateShortName()
 		if err != nil {
 			return nil, fmt.Errorf("generate short name: %w", err)
 		}
-		shortName = generated
+
+		l, err := s.linkRepo.Create(dbCtx, originalURL, generated)
+		if err == nil {
+			return l, nil
+		}
+
+		if !errors.Is(err, link.ErrShortNameTaken) {
+			return nil, err
+		}
+
+		s.logger.Warn("short name collision, retrying",
+			slog.String("short_name", generated),
+			slog.Int("attempt", i+1),
+		)
 	}
 
-	l, err := s.repo.Create(ctx, originalURL, shortName)
-	if err != nil {
-		return nil, err
-	}
-
-	return l, nil
+	return nil, fmt.Errorf("failed to generate unique short name after %d attempts", maxShortNameRetries)
 }
 
 func (s *service) GetLink(ctx context.Context, id int64) (*link.Link, error) {
-	return s.repo.GetByID(ctx, id)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.GetByID(dbCtx, id)
 }
 
 func (s *service) GetLinkByShortName(ctx context.Context, shortName string) (*link.Link, error) {
-	return s.repo.GetByShortName(ctx, shortName)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.GetByShortName(dbCtx, shortName)
 }
 
 func (s *service) ListLinks(ctx context.Context) ([]link.Link, error) {
-	return s.repo.List(ctx)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.List(dbCtx)
 }
 
 func (s *service) ListLinksPaginated(ctx context.Context, limit, offset int32) (*ListResult, error) {
-	links, err := s.repo.ListPaginated(ctx, limit, offset)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+
+	links, err := s.linkRepo.ListPaginated(dbCtx, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 
-	total, err := s.repo.Count(ctx)
+	total, err := s.linkRepo.Count(dbCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -96,28 +134,39 @@ func (s *service) ListLinksPaginated(ctx context.Context, limit, offset int32) (
 }
 
 func (s *service) UpdateLink(ctx context.Context, id int64, originalURL, shortName string) (*link.Link, error) {
-	return s.repo.Update(ctx, id, originalURL, shortName)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.Update(dbCtx, id, originalURL, shortName)
 }
 
 func (s *service) DeleteLink(ctx context.Context, id int64) error {
-	return s.repo.Delete(ctx, id)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.Delete(dbCtx, id)
 }
 
 func (s *service) CountLinks(ctx context.Context) (int64, error) {
-	return s.repo.Count(ctx)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.linkRepo.Count(dbCtx)
 }
 
 func (s *service) CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
-	return s.repo.CreateVisit(ctx, visit)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.visitRepo.Create(dbCtx, visit)
 }
 
 func (s *service) ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error) {
-	visits, err := s.repo.ListVisitsPaginated(ctx, limit, offset)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+
+	visits, err := s.visitRepo.ListPaginated(dbCtx, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 
-	total, err := s.repo.CountVisits(ctx)
+	total, err := s.visitRepo.Count(dbCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +178,15 @@ func (s *service) ListLinkVisitsPaginated(ctx context.Context, limit, offset int
 }
 
 func (s *service) CountLinkVisits(ctx context.Context) (int64, error) {
-	return s.repo.CountVisits(ctx)
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.visitRepo.Count(dbCtx)
+}
+
+func (s *service) DeleteLinkVisit(ctx context.Context, id int64) error {
+	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
+	defer cancel()
+	return s.visitRepo.Delete(dbCtx, id)
 }
 
 func (s *service) generateShortName() (string, error) {

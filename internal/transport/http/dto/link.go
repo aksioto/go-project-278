@@ -11,11 +11,11 @@ type LinkResponse struct {
 }
 
 type CreateLinkRequest struct {
-	OriginalURL string `json:"original_url" binding:"required,url"`
-	ShortName   string `json:"short_name,omitempty"`
+	OriginalURL string `json:"original_url" binding:"required,rfc3986url"`
+	ShortName   string `json:"short_name,omitempty" binding:"omitempty,min=3,max=32"`
 }
 
 type UpdateLinkRequest struct {
-	OriginalURL string `json:"original_url" binding:"required,url"`
-	ShortName   string `json:"short_name" binding:"required"`
+	OriginalURL string `json:"original_url" binding:"required,rfc3986url"`
+	ShortName   string `json:"short_name" binding:"required,min=3,max=32"`
 }

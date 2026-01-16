@@ -6,14 +6,26 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+var sensitiveHeaders = []string{
+	"Authorization",
+	"Cookie",
+	"Set-Cookie",
+	"X-Auth-Token",
+	"X-Api-Key",
+}
+
 type Client struct {
-	active bool
-	flush  func()
+	enabled      bool
+	flushTimeout time.Duration
 }
 
 func Init(opts sentry.ClientOptions, flushTimeout time.Duration) (*Client, error) {
 	if opts.Dsn == "" {
-		return &Client{active: false}, nil
+		return &Client{enabled: false}, nil
+	}
+
+	if opts.BeforeSend == nil {
+		opts.BeforeSend = sanitizeEvent
 	}
 
 	if err := sentry.Init(opts); err != nil {
@@ -21,19 +33,28 @@ func Init(opts sentry.ClientOptions, flushTimeout time.Duration) (*Client, error
 	}
 
 	return &Client{
-		active: true,
-		flush: func() {
-			sentry.Flush(flushTimeout)
-		},
+		enabled:      true,
+		flushTimeout: flushTimeout,
 	}, nil
 }
 
+func sanitizeEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+	if event.Request != nil && event.Request.Headers != nil {
+		for _, header := range sensitiveHeaders {
+			if _, exists := event.Request.Headers[header]; exists {
+				event.Request.Headers[header] = "[FILTERED]"
+			}
+		}
+	}
+	return event
+}
+
 func (c *Client) Close() {
-	if c.active && c.flush != nil {
-		c.flush()
+	if c.enabled {
+		sentry.Flush(c.flushTimeout)
 	}
 }
 
 func (c *Client) Active() bool {
-	return c.active
+	return c.enabled
 }

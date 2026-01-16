@@ -16,6 +16,7 @@ const (
 type Config struct {
 	Env         string `env:"ENV" envDefault:"dev"`
 	ServiceName string `env:"SERVICE_NAME,required"`
+	AppVersion  string `env:"APP_VERSION,required"`
 
 	Port    string `env:"PORT" envDefault:"80"`
 	AppPort string `env:"APP_PORT" envDefault:"8080"`

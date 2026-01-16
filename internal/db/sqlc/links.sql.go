@@ -51,10 +51,11 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 	return i, err
 }
 
-const deleteLink = `-- name: DeleteLink :exec
+const deleteLink = `-- name: DeleteLink :one
 DELETE
 FROM links
 WHERE id = $1
+RETURNING id
 `
 
 // DeleteLink
@@ -62,9 +63,11 @@ WHERE id = $1
 //	DELETE
 //	FROM links
 //	WHERE id = $1
-func (q *Queries) DeleteLink(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteLink, id)
-	return err
+//	RETURNING id
+func (q *Queries) DeleteLink(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, deleteLink, id)
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getLinkByID = `-- name: GetLinkByID :one

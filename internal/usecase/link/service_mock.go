@@ -9,7 +9,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockService is a mock of Service interface.
@@ -107,6 +107,20 @@ func (m *MockService) DeleteLink(ctx context.Context, id int64) error {
 func (mr *MockServiceMockRecorder) DeleteLink(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLink", reflect.TypeOf((*MockService)(nil).DeleteLink), ctx, id)
+}
+
+// DeleteLinkVisit mocks base method.
+func (m *MockService) DeleteLinkVisit(ctx context.Context, id int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteLinkVisit", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteLinkVisit indicates an expected call of DeleteLinkVisit.
+func (mr *MockServiceMockRecorder) DeleteLinkVisit(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLinkVisit", reflect.TypeOf((*MockService)(nil).DeleteLinkVisit), ctx, id)
 }
 
 // GetLink mocks base method.

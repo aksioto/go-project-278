@@ -3,7 +3,7 @@ package testutil
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 func NewController(t *testing.T) *gomock.Controller {

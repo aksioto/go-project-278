@@ -11,3 +11,7 @@ LIMIT $1 OFFSET $2;
 
 -- name: CountLinkVisits :one
 SELECT COUNT(*) FROM link_visits;
+
+-- name: DeleteLinkVisit :execrows
+DELETE FROM link_visits
+WHERE id = $1;

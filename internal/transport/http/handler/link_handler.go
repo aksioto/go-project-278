@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"code/internal/domain/link"
 	"code/internal/transport/http/dto"
 	"code/internal/transport/http/mapper"
+	"code/internal/transport/http/validation"
 	linkusecase "code/internal/usecase/link"
 
 	"github.com/gin-gonic/gin"
@@ -47,20 +47,12 @@ func (h *LinkHandler) parseID(c *gin.Context) (int64, bool) {
 }
 
 func (h *LinkHandler) handleError(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, link.ErrNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
-	case errors.Is(err, link.ErrShortNameTaken):
-		c.JSON(http.StatusConflict, gin.H{"error": "short_name already exists"})
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
+	_ = c.Error(err) //nolint:errcheck // error handled by middleware
 }
 
 func (h *LinkHandler) CreateLink(c *gin.Context) {
 	var req dto.CreateLinkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !h.bindJSON(c, &req) {
 		return
 	}
 
@@ -148,6 +140,20 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 	c.JSON(status, response)
 }
 
+func (h *LinkHandler) DeleteLinkVisit(c *gin.Context) {
+	id, ok := h.parseID(c)
+	if !ok {
+		return
+	}
+
+	if err := h.service.DeleteLinkVisit(c.Request.Context(), id); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 func (h *LinkHandler) ListLinkVisits(c *gin.Context) {
 	rangeParam := c.Query("range")
 	pRange, err := h.parseRange(rangeParam)
@@ -193,8 +199,7 @@ func (h *LinkHandler) UpdateLink(c *gin.Context) {
 	}
 
 	var req dto.UpdateLinkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !h.bindJSON(c, &req) {
 		return
 	}
 
@@ -240,9 +245,21 @@ func (h *LinkHandler) RedirectToOriginalURL(c *gin.Context) {
 	}
 
 	if _, err := h.service.CreateLinkVisit(c.Request.Context(), visit); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.handleError(c, err)
 		return
 	}
 
 	c.Redirect(status, domainLink.OriginalURL)
+}
+
+func (h *LinkHandler) bindJSON(c *gin.Context, dst any) bool {
+	if err := c.ShouldBindJSON(dst); err != nil {
+		if ve, ok := validation.ExtractValidationErrors(err); ok {
+			h.handleError(c, ve)
+			return false
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return false
+	}
+	return true
 }

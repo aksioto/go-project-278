@@ -13,14 +13,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const pgUniqueViolation = "23505"
+
 type LinkPostgres struct {
-	pool    *pgxpool.Pool
 	queries *sqlc.Queries
 }
 
+var _ link.LinkRepository = (*LinkPostgres)(nil)
+
 func NewLinkPostgres(pool *pgxpool.Pool) *LinkPostgres {
 	return &LinkPostgres{
-		pool:    pool,
 		queries: sqlc.New(pool),
 	}
 }
@@ -31,23 +33,6 @@ func toLink(row sqlc.Link) *link.Link {
 		OriginalURL: row.OriginalUrl,
 		ShortName:   row.ShortName,
 		CreatedAt:   row.CreatedAt.Time,
-	}
-}
-
-func toVisit(row sqlc.LinkVisit) *link.Visit {
-	referer := ""
-	if row.Referer.Valid {
-		referer = row.Referer.String
-	}
-
-	return &link.Visit{
-		ID:        row.ID,
-		LinkID:    row.LinkID,
-		IP:        row.Ip,
-		UserAgent: row.UserAgent,
-		Referer:   referer,
-		Status:    int(row.Status),
-		CreatedAt: row.CreatedAt.Time,
 	}
 }
 
@@ -149,61 +134,20 @@ func (r *LinkPostgres) Update(ctx context.Context, id int64, originalURL, shortN
 }
 
 func (r *LinkPostgres) Delete(ctx context.Context, id int64) error {
-	if err := r.queries.DeleteLink(ctx, id); err != nil {
+	_, err := r.queries.DeleteLink(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return link.ErrNotFound
+		}
 		return fmt.Errorf("delete link: %w", err)
 	}
 	return nil
 }
 
-func (r *LinkPostgres) CreateVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
-	var referer string
-	if visit.Referer != "" {
-		referer = visit.Referer
-	}
-
-	row, err := r.queries.CreateLinkVisit(ctx, sqlc.CreateLinkVisitParams{
-		LinkID:    visit.LinkID,
-		Ip:        visit.IP,
-		UserAgent: visit.UserAgent,
-		Column4:   referer,
-		Status:    int32(visit.Status),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create link visit: %w", err)
-	}
-
-	return toVisit(row), nil
-}
-
-func (r *LinkPostgres) ListVisitsPaginated(ctx context.Context, limit, offset int32) ([]link.Visit, error) {
-	rows, err := r.queries.ListLinkVisitsPaginated(ctx, sqlc.ListLinkVisitsPaginatedParams{
-		Limit:  limit,
-		Offset: offset,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list link visits paginated: %w", err)
-	}
-
-	visits := make([]link.Visit, 0, len(rows))
-	for _, row := range rows {
-		visits = append(visits, *toVisit(row))
-	}
-
-	return visits, nil
-}
-
-func (r *LinkPostgres) CountVisits(ctx context.Context) (int64, error) {
-	count, err := r.queries.CountLinkVisits(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("count link visits: %w", err)
-	}
-	return count, nil
-}
-
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
+		return pgErr.Code == pgUniqueViolation
 	}
 	return false
 }
