@@ -357,7 +357,7 @@ func TestListLinks(t *testing.T) {
 					ListLinksPaginated(gomock.Any(), int32(10), int32(0)).
 					Return(&linkusecase.ListResult{Links: results, Total: 42}, nil)
 			},
-			expectedStatus:       http.StatusPartialContent,
+			expectedStatus:       http.StatusOK,
 			expectedContentRange: "links 0-1/42",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.LinkResponse{
@@ -379,7 +379,7 @@ func TestListLinks(t *testing.T) {
 					ListLinksPaginated(gomock.Any(), int32(2), int32(5)).
 					Return(&linkusecase.ListResult{Links: results, Total: 11}, nil)
 			},
-			expectedStatus:       http.StatusPartialContent,
+			expectedStatus:       http.StatusOK,
 			expectedContentRange: "links 5-6/11",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.LinkResponse{
@@ -397,7 +397,7 @@ func TestListLinks(t *testing.T) {
 					ListLinksPaginated(gomock.Any(), int32(10), int32(100)).
 					Return(&linkusecase.ListResult{Links: []link.Link{}, Total: 42}, nil)
 			},
-			expectedStatus:       http.StatusPartialContent,
+			expectedStatus:       http.StatusOK,
 			expectedContentRange: "links 100-100/42",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.LinkResponse{}
@@ -457,7 +457,7 @@ func TestListLinks(t *testing.T) {
 					ListLinksPaginated(gomock.Any(), maxPageSize, int32(0)).
 					Return(&linkusecase.ListResult{Links: results, Total: 500}, nil)
 			},
-			expectedStatus:       http.StatusPartialContent,
+			expectedStatus:       http.StatusOK,
 			expectedContentRange: "links 0-1/500",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.LinkResponse{
@@ -700,7 +700,7 @@ func TestListLinkVisits(t *testing.T) {
 					ListVisitsPaginated(gomock.Any(), int32(2), int32(5)).
 					Return(&visitusecase.ListResult{Visits: visits, Total: 7}, nil)
 			},
-			expectedStatus:       http.StatusPartialContent,
+			expectedStatus:       http.StatusOK,
 			expectedContentRange: "link_visits 5-5/7",
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				expected := []dto.VisitResponse{

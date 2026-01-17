@@ -58,7 +58,7 @@ go mod download
 
 ### Run the service
 ```bash
-go run ./cmd/urlshortener
+go run .
 ```
 
 ### Run backend + Hexlet frontend (dev)

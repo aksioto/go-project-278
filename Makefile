@@ -28,7 +28,7 @@ lint:
 	golangci-lint run ./...
 
 build:
-	go build -trimpath -ldflags="-s -w" -o bin/urlshortener ./cmd/urlshortener
+	go build -trimpath -ldflags="-s -w" -o bin/urlshortener .
 
 cover:
 	go test -coverprofile=cover.out ./...

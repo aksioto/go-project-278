@@ -21,7 +21,7 @@ RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /build/app ./cmd/urlshortener
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /build/app .
 
 # 3) Runtime
 FROM alpine:3.22
@@ -35,7 +35,7 @@ COPY --from=frontend-builder \
   /build/frontend/node_modules/@hexlet/project-url-shortener-frontend/dist \
   /app/public
 
-COPY --from=backend-builder /build/code/internal/db/migrations /app/db/migrations
+COPY --from=backend-builder /build/code/db/migrations /app/db/migrations
 COPY --from=backend-builder /go/bin/goose /usr/local/bin/goose
 
 COPY bin/run.sh /app/bin/run.sh

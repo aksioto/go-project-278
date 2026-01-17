@@ -4,7 +4,7 @@
   },
   "scripts": {
     "frontend": "cd node_modules/@hexlet/project-url-shortener-frontend && npm run preview",
-    "backend": "go run ./cmd/urlshortener/main.go",
+    "backend": "go run main.go",
     "dev": "concurrently \"npm run backend\" \"npm run frontend\""
   },
   "devDependencies": {

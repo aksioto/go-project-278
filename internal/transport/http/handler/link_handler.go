@@ -143,12 +143,7 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 	c.Header("Content-Range", fmt.Sprintf("links %d-%d/%d", pRange.start, actualEnd, result.Total))
 
 	response := mapper.ToLinkResponseList(result.Links, h.baseURL)
-	status := http.StatusOK
-	if rangeParam != "" {
-		status = http.StatusPartialContent
-	}
-
-	c.JSON(status, response)
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *LinkHandler) DeleteLinkVisit(c *gin.Context) {
@@ -195,12 +190,7 @@ func (h *LinkHandler) ListLinkVisits(c *gin.Context) {
 	c.Header("Content-Range", fmt.Sprintf("link_visits %d-%d/%d", pRange.start, actualEnd, result.Total))
 
 	response := mapper.ToVisitResponseList(result.Visits)
-	status := http.StatusOK
-	if rangeParam != "" {
-		status = http.StatusPartialContent
-	}
-
-	c.JSON(status, response)
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *LinkHandler) UpdateLink(c *gin.Context) {
