@@ -33,6 +33,11 @@ func handleError(c *gin.Context, err error) {
 		return
 	}
 
+	if errors.Is(err, link.ErrInvalidID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
 	if errors.Is(err, link.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
 		return

@@ -26,11 +26,6 @@ type ListResult struct {
 	Total int64
 }
 
-type VisitListResult struct {
-	Visits []link.Visit
-	Total  int64
-}
-
 type Service interface {
 	CreateLink(ctx context.Context, originalURL, shortName string) (*link.Link, error)
 	GetLink(ctx context.Context, id int64) (*link.Link, error)
@@ -40,26 +35,19 @@ type Service interface {
 	CountLinks(ctx context.Context) (int64, error)
 	UpdateLink(ctx context.Context, id int64, originalURL, shortName string) (*link.Link, error)
 	DeleteLink(ctx context.Context, id int64) error
-
-	CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error)
-	ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error)
-	CountLinkVisits(ctx context.Context) (int64, error)
-	DeleteLinkVisit(ctx context.Context, id int64) error
 }
 
 type service struct {
-	linkRepo  link.LinkRepository
-	visitRepo link.VisitRepository
-	logger    *slog.Logger
+	linkRepo link.LinkRepository
+	logger   *slog.Logger
 }
 
 var _ Service = (*service)(nil)
 
-func NewService(linkRepo link.LinkRepository, visitRepo link.VisitRepository, logger *slog.Logger) *service {
+func NewService(linkRepo link.LinkRepository, logger *slog.Logger) *service {
 	return &service{
-		linkRepo:  linkRepo,
-		visitRepo: visitRepo,
-		logger:    logger,
+		linkRepo: linkRepo,
+		logger:   logger,
 	}
 }
 
@@ -149,44 +137,6 @@ func (s *service) CountLinks(ctx context.Context) (int64, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
 	defer cancel()
 	return s.linkRepo.Count(dbCtx)
-}
-
-func (s *service) CreateLinkVisit(ctx context.Context, visit link.Visit) (*link.Visit, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
-	defer cancel()
-	return s.visitRepo.Create(dbCtx, visit)
-}
-
-func (s *service) ListLinkVisitsPaginated(ctx context.Context, limit, offset int32) (*VisitListResult, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
-	defer cancel()
-
-	visits, err := s.visitRepo.ListPaginated(dbCtx, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	total, err := s.visitRepo.Count(dbCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &VisitListResult{
-		Visits: visits,
-		Total:  total,
-	}, nil
-}
-
-func (s *service) CountLinkVisits(ctx context.Context) (int64, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
-	defer cancel()
-	return s.visitRepo.Count(dbCtx)
-}
-
-func (s *service) DeleteLinkVisit(ctx context.Context, id int64) error {
-	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
-	defer cancel()
-	return s.visitRepo.Delete(dbCtx, id)
 }
 
 func (s *service) generateShortName() (string, error) {

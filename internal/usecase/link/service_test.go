@@ -19,9 +19,8 @@ import (
 var testTimestamp = time.Date(2025, time.January, 1, 12, 0, 0, 0, time.UTC)
 
 type testEnv struct {
-	svc       *service
-	linkRepo  *link.MockLinkRepository
-	visitRepo *link.MockVisitRepository
+	svc      *service
+	linkRepo *link.MockLinkRepository
 }
 
 func setupTestEnv(t *testing.T) *testEnv {
@@ -29,55 +28,11 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 	ctrl := testutil.NewController(t)
 	linkRepo := link.NewMockLinkRepository(ctrl)
-	visitRepo := link.NewMockVisitRepository(ctrl)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	return &testEnv{
-		svc:       NewService(linkRepo, visitRepo, logger),
-		linkRepo:  linkRepo,
-		visitRepo: visitRepo,
-	}
-}
-
-func TestService_DeleteLinkVisit(t *testing.T) {
-	tests := []struct {
-		name      string
-		mockSetup func(*link.MockVisitRepository)
-		wantErr   bool
-	}{
-		{
-			name: "success",
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().
-					Delete(gomock.Any(), int64(10)).
-					Return(nil)
-			},
-		},
-		{
-			name: "not found",
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().
-					Delete(gomock.Any(), int64(10)).
-					Return(link.ErrVisitNotFound)
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := setupTestEnv(t)
-			tt.mockSetup(env.visitRepo)
-
-			err := env.svc.DeleteLinkVisit(context.Background(), 10)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-		})
+		svc:      NewService(linkRepo, logger),
+		linkRepo: linkRepo,
 	}
 }
 
@@ -87,17 +42,6 @@ func makeTestLink(id int64, url, shortName string) *link.Link {
 		OriginalURL: url,
 		ShortName:   shortName,
 		CreatedAt:   testTimestamp,
-	}
-}
-
-func makeTestVisit(id, linkID int64) *link.Visit {
-	return &link.Visit{
-		ID:        id,
-		LinkID:    linkID,
-		IP:        "127.0.0.1",
-		UserAgent: "test-agent",
-		Status:    302,
-		CreatedAt: testTimestamp,
 	}
 }
 
@@ -373,6 +317,17 @@ func TestService_ListLinksPaginated(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:   "count error",
+			limit:  10,
+			offset: 0,
+			mockSetup: func(r *link.MockLinkRepository) {
+				links := []link.Link{*makeTestLink(1, "https://example.com/1", "one")}
+				r.EXPECT().ListPaginated(gomock.Any(), int32(10), int32(0)).Return(links, nil)
+				r.EXPECT().Count(gomock.Any()).Return(int64(0), errors.New("count error"))
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -495,102 +450,6 @@ func TestService_DeleteLink(t *testing.T) {
 	}
 }
 
-func TestService_CreateLinkVisit(t *testing.T) {
-	tests := []struct {
-		name      string
-		visit     link.Visit
-		mockSetup func(*link.MockVisitRepository)
-		wantErr   bool
-		wantID    int64
-	}{
-		{
-			name:  "success",
-			visit: link.Visit{LinkID: 1, IP: "127.0.0.1", UserAgent: "test-agent", Status: 302},
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().Create(gomock.Any(), link.Visit{LinkID: 1, IP: "127.0.0.1", UserAgent: "test-agent", Status: 302}).Return(makeTestVisit(1, 1), nil)
-			},
-			wantID: 1,
-		},
-		{
-			name:  "error",
-			visit: link.Visit{LinkID: 1, IP: "127.0.0.1", Status: 302},
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errors.New("db error"))
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := setupTestEnv(t)
-			tt.mockSetup(env.visitRepo)
-
-			result, err := env.svc.CreateLinkVisit(context.Background(), tt.visit)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, result.ID)
-		})
-	}
-}
-
-func TestService_ListLinkVisitsPaginated(t *testing.T) {
-	tests := []struct {
-		name      string
-		limit     int32
-		offset    int32
-		mockSetup func(*link.MockVisitRepository)
-		wantErr   bool
-		wantCount int
-		wantTotal int64
-	}{
-		{
-			name:   "success",
-			limit:  10,
-			offset: 0,
-			mockSetup: func(r *link.MockVisitRepository) {
-				visits := []link.Visit{*makeTestVisit(1, 1), *makeTestVisit(2, 1)}
-				r.EXPECT().ListPaginated(gomock.Any(), int32(10), int32(0)).Return(visits, nil)
-				r.EXPECT().Count(gomock.Any()).Return(int64(100), nil)
-			},
-			wantCount: 2,
-			wantTotal: 100,
-		},
-		{
-			name:   "list error",
-			limit:  10,
-			offset: 0,
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().ListPaginated(gomock.Any(), int32(10), int32(0)).Return(nil, errors.New("db error"))
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := setupTestEnv(t)
-			tt.mockSetup(env.visitRepo)
-
-			result, err := env.svc.ListLinkVisitsPaginated(context.Background(), tt.limit, tt.offset)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Len(t, result.Visits, tt.wantCount)
-			assert.Equal(t, tt.wantTotal, result.Total)
-		})
-	}
-}
-
 func TestService_CountLinks(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -620,47 +479,6 @@ func TestService_CountLinks(t *testing.T) {
 			tt.mockSetup(env.linkRepo)
 
 			count, err := env.svc.CountLinks(context.Background())
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantCount, count)
-		})
-	}
-}
-
-func TestService_CountLinkVisits(t *testing.T) {
-	tests := []struct {
-		name      string
-		mockSetup func(*link.MockVisitRepository)
-		wantErr   bool
-		wantCount int64
-	}{
-		{
-			name: "success",
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().Count(gomock.Any()).Return(int64(100), nil)
-			},
-			wantCount: 100,
-		},
-		{
-			name: "error",
-			mockSetup: func(r *link.MockVisitRepository) {
-				r.EXPECT().Count(gomock.Any()).Return(int64(0), errors.New("db error"))
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := setupTestEnv(t)
-			tt.mockSetup(env.visitRepo)
-
-			count, err := env.svc.CountLinkVisits(context.Background())
 
 			if tt.wantErr {
 				require.Error(t, err)

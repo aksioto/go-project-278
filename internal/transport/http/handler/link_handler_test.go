@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"code/internal/transport/http/middleware"
 	"code/internal/transport/http/validation"
 	linkusecase "code/internal/usecase/link"
+	visitusecase "code/internal/usecase/visit"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -47,36 +50,36 @@ func TestDeleteLinkVisit(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
-		mockSetup      func(*linkusecase.MockService)
+		visitMockSetup func(*visitusecase.MockService)
 		expectedStatus int
 	}{
 		{
 			name: "success",
 			id:   "1",
-			mockSetup: func(s *linkusecase.MockService) {
-				s.EXPECT().DeleteLinkVisit(gomock.Any(), int64(1)).Return(nil)
+			visitMockSetup: func(s *visitusecase.MockService) {
+				s.EXPECT().DeleteVisit(gomock.Any(), int64(1)).Return(nil)
 			},
 			expectedStatus: http.StatusNoContent,
 		},
 		{
 			name: "service error",
 			id:   "2",
-			mockSetup: func(s *linkusecase.MockService) {
-				s.EXPECT().DeleteLinkVisit(gomock.Any(), int64(2)).Return(link.ErrVisitNotFound)
+			visitMockSetup: func(s *visitusecase.MockService) {
+				s.EXPECT().DeleteVisit(gomock.Any(), int64(2)).Return(link.ErrVisitNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
 		},
 		{
 			name:           "invalid id",
 			id:             "abc",
-			mockSetup:      func(*linkusecase.MockService) {},
+			visitMockSetup: nil,
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockSetup)
+			router := setupTestRouter(t, nil, tt.visitMockSetup)
 
 			resp := testutil.PerformRequest(t, router, http.MethodDelete, "/api/link_visits/"+tt.id, nil)
 
@@ -123,24 +126,33 @@ func visitToDTO(v link.Visit) dto.VisitResponse {
 	}
 }
 
-func setupTestRouter(t *testing.T, mockExpect func(*linkusecase.MockService)) *gin.Engine {
+func setupTestRouter(
+	t *testing.T,
+	linkMockExpect func(*linkusecase.MockService),
+	visitMockExpect func(*visitusecase.MockService),
+) *gin.Engine {
 	t.Helper()
 
 	ctrl := testutil.NewController(t)
-	service := linkusecase.NewMockService(ctrl)
+	linkService := linkusecase.NewMockService(ctrl)
+	visitService := visitusecase.NewMockService(ctrl)
 
-	if mockExpect != nil {
-		mockExpect(service)
+	if linkMockExpect != nil {
+		linkMockExpect(linkService)
+	}
+	if visitMockExpect != nil {
+		visitMockExpect(visitService)
 	}
 
 	validation.Init()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.TrustedPlatform = gin.PlatformCloudflare
 	router.Use(middleware.ErrorsMiddleware())
 
-	linkHandler := NewLinkHandler(service, testutil.TestBaseURL)
+	linkHandler := NewLinkHandler(linkService, visitService, testutil.TestBaseURL, logger)
 	api := router.Group("/api")
 	links := api.Group("/links")
 
@@ -231,7 +243,7 @@ func TestCreateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.mockExpect, nil)
 
 			resp := testutil.PerformRequest(t, router, http.MethodPost, "/api/links", tt.body)
 			require.Equal(t, tt.expectedStatus, resp.Code)
@@ -291,7 +303,7 @@ func TestGetLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.mockExpect, nil)
 
 			resp := testutil.PerformRequest(t, router, http.MethodGet, "/api/links/"+tt.id, nil)
 			require.Equal(t, tt.expectedStatus, resp.Code)
@@ -426,11 +438,11 @@ func TestListLinks(t *testing.T) {
 			mockExpect: func(s *linkusecase.MockService) {
 				s.EXPECT().
 					CountLinks(gomock.Any()).
-					Return(int64(0), errors.New("count failure"))
+					Return(int64(0), fmt.Errorf("count failure"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
-				testutil.AssertErrorResponse(t, resp, "count failure")
+				testutil.AssertErrorResponse(t, resp, "internal server error")
 			},
 		},
 		{
@@ -472,7 +484,7 @@ func TestListLinks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.mockExpect, nil)
 
 			path := "/api/links"
 			if tt.rangeParam != "" {
@@ -583,7 +595,7 @@ func TestUpdateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.mockExpect, nil)
 
 			resp := testutil.PerformRequest(t, router, http.MethodPut, "/api/links/"+tt.id, tt.body)
 			require.Equal(t, tt.expectedStatus, resp.Code)
@@ -635,7 +647,7 @@ func TestDeleteLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.mockExpect, nil)
 
 			resp := testutil.PerformRequest(t, router, http.MethodDelete, "/api/links/"+tt.id, nil)
 			require.Equal(t, tt.expectedStatus, resp.Code)
@@ -650,7 +662,7 @@ func TestListLinkVisits(t *testing.T) {
 	tests := []struct {
 		name                 string
 		rangeParam           string
-		mockExpect           func(*linkusecase.MockService)
+		visitMockExpect      func(*visitusecase.MockService)
 		expectedStatus       int
 		expectedContentRange string
 		assert               func(t *testing.T, resp *httptest.ResponseRecorder)
@@ -658,14 +670,14 @@ func TestListLinkVisits(t *testing.T) {
 		{
 			name:       "success default pagination",
 			rangeParam: "",
-			mockExpect: func(s *linkusecase.MockService) {
+			visitMockExpect: func(s *visitusecase.MockService) {
 				visits := []link.Visit{
 					makeVisit(1, 10, "1.1.1.1", "ua", "ref", http.StatusFound),
 					makeVisit(2, 11, "2.2.2.2", "ua2", "", http.StatusFound),
 				}
 				s.EXPECT().
-					ListLinkVisitsPaginated(gomock.Any(), defaultPageSize, int32(0)).
-					Return(&linkusecase.VisitListResult{Visits: visits, Total: 2}, nil)
+					ListVisitsPaginated(gomock.Any(), defaultPageSize, int32(0)).
+					Return(&visitusecase.ListResult{Visits: visits, Total: 2}, nil)
 			},
 			expectedStatus:       http.StatusOK,
 			expectedContentRange: "link_visits 0-1/2",
@@ -680,13 +692,13 @@ func TestListLinkVisits(t *testing.T) {
 		{
 			name:       "with range parameter",
 			rangeParam: "[5,6]",
-			mockExpect: func(s *linkusecase.MockService) {
+			visitMockExpect: func(s *visitusecase.MockService) {
 				visits := []link.Visit{
 					makeVisit(3, 12, "3.3.3.3", "ua3", "", http.StatusFound),
 				}
 				s.EXPECT().
-					ListLinkVisitsPaginated(gomock.Any(), int32(2), int32(5)).
-					Return(&linkusecase.VisitListResult{Visits: visits, Total: 7}, nil)
+					ListVisitsPaginated(gomock.Any(), int32(2), int32(5)).
+					Return(&visitusecase.ListResult{Visits: visits, Total: 7}, nil)
 			},
 			expectedStatus:       http.StatusPartialContent,
 			expectedContentRange: "link_visits 5-5/7",
@@ -700,9 +712,9 @@ func TestListLinkVisits(t *testing.T) {
 		{
 			name:       "invalid range format",
 			rangeParam: "bad",
-			mockExpect: func(s *linkusecase.MockService) {
+			visitMockExpect: func(s *visitusecase.MockService) {
 				s.EXPECT().
-					CountLinkVisits(gomock.Any()).
+					CountVisits(gomock.Any()).
 					Return(int64(4), nil)
 			},
 			expectedStatus:       http.StatusRequestedRangeNotSatisfiable,
@@ -714,23 +726,23 @@ func TestListLinkVisits(t *testing.T) {
 		{
 			name:       "count error on invalid range",
 			rangeParam: "oops",
-			mockExpect: func(s *linkusecase.MockService) {
+			visitMockExpect: func(s *visitusecase.MockService) {
 				s.EXPECT().
-					CountLinkVisits(gomock.Any()).
-					Return(int64(0), errors.New("count failure"))
+					CountVisits(gomock.Any()).
+					Return(int64(0), fmt.Errorf("count failure"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
-				testutil.AssertErrorResponse(t, resp, "count failure")
+				testutil.AssertErrorResponse(t, resp, "internal server error")
 			},
 		},
 		{
 			name:       "service error",
 			rangeParam: "",
-			mockExpect: func(s *linkusecase.MockService) {
+			visitMockExpect: func(s *visitusecase.MockService) {
 				s.EXPECT().
-					ListLinkVisitsPaginated(gomock.Any(), defaultPageSize, int32(0)).
-					Return(nil, errors.New("db failure"))
+					ListVisitsPaginated(gomock.Any(), defaultPageSize, int32(0)).
+					Return(nil, fmt.Errorf("db failure"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
@@ -741,7 +753,7 @@ func TestListLinkVisits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, nil, tt.visitMockExpect)
 
 			path := "/api/link_visits"
 			if tt.rangeParam != "" {
@@ -767,22 +779,25 @@ func TestRedirectToOriginalURL(t *testing.T) {
 	)
 
 	tests := []struct {
-		name           string
-		mockExpect     func(*linkusecase.MockService)
-		expectedStatus int
-		assert         func(t *testing.T, resp *httptest.ResponseRecorder)
+		name            string
+		linkMockExpect  func(*linkusecase.MockService)
+		visitMockExpect func(*visitusecase.MockService)
+		expectedStatus  int
+		assert          func(t *testing.T, resp *httptest.ResponseRecorder)
 	}{
 		{
 			name: "success",
-			mockExpect: func(s *linkusecase.MockService) {
+			linkMockExpect: func(s *linkusecase.MockService) {
 				result := makeLink(1, "https://example.com", code)
 				s.EXPECT().
 					GetLinkByShortName(gomock.Any(), code).
 					Return(&result, nil)
+			},
+			visitMockExpect: func(s *visitusecase.MockService) {
 				s.EXPECT().
-					CreateLinkVisit(gomock.Any(), gomock.Any()).
+					CreateVisit(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, visit link.Visit) (*link.Visit, error) {
-						if visit.LinkID != result.ID {
+						if visit.LinkID != 1 {
 							return nil, fmt.Errorf("unexpected link id %d", visit.LinkID)
 						}
 						if visit.Status != http.StatusFound {
@@ -798,37 +813,40 @@ func TestRedirectToOriginalURL(t *testing.T) {
 		},
 		{
 			name: "link not found",
-			mockExpect: func(s *linkusecase.MockService) {
+			linkMockExpect: func(s *linkusecase.MockService) {
 				s.EXPECT().
 					GetLinkByShortName(gomock.Any(), code).
 					Return(nil, link.ErrNotFound)
 			},
-			expectedStatus: http.StatusNotFound,
+			visitMockExpect: nil,
+			expectedStatus:  http.StatusNotFound,
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				testutil.AssertErrorResponse(t, resp, "link not found")
 			},
 		},
 		{
-			name: "visit creation error",
-			mockExpect: func(s *linkusecase.MockService) {
+			name: "visit creation error - redirect still works",
+			linkMockExpect: func(s *linkusecase.MockService) {
 				result := makeLink(1, "https://example.com", code)
 				s.EXPECT().
 					GetLinkByShortName(gomock.Any(), code).
 					Return(&result, nil)
-				s.EXPECT().
-					CreateLinkVisit(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("save failure"))
 			},
-			expectedStatus: http.StatusInternalServerError,
+			visitMockExpect: func(s *visitusecase.MockService) {
+				s.EXPECT().
+					CreateVisit(gomock.Any(), gomock.Any()).
+					Return(nil, fmt.Errorf("save failure"))
+			},
+			expectedStatus: http.StatusFound,
 			assert: func(t *testing.T, resp *httptest.ResponseRecorder) {
-				testutil.AssertErrorResponse(t, resp, "internal server error")
+				assert.Equal(t, "https://example.com", resp.Header().Get("Location"))
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter(t, tt.mockExpect)
+			router := setupTestRouter(t, tt.linkMockExpect, tt.visitMockExpect)
 
 			headers := map[string]string{
 				"Cf-Connecting-Ip": expectedIP,

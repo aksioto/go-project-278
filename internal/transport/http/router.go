@@ -1,14 +1,23 @@
 package httptransport
 
 import (
+	"log/slog"
+
 	"code/internal/transport/http/handler"
 	linkusecase "code/internal/usecase/link"
+	visitusecase "code/internal/usecase/visit"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.Engine, service linkusecase.Service, baseURL string) {
-	linkHandler := handler.NewLinkHandler(service, baseURL)
+func SetupRoutes(
+	router *gin.Engine,
+	linkService linkusecase.Service,
+	visitService visitusecase.Service,
+	baseURL string,
+	logger *slog.Logger,
+) {
+	linkHandler := handler.NewLinkHandler(linkService, visitService, baseURL, logger)
 
 	api := router.Group("/api")
 	{
@@ -21,8 +30,11 @@ func SetupRoutes(router *gin.Engine, service linkusecase.Service, baseURL string
 			links.DELETE("/:id", linkHandler.DeleteLink)
 		}
 
-		api.GET("/link_visits", linkHandler.ListLinkVisits)
-		api.DELETE("/link_visits/:id", linkHandler.DeleteLinkVisit)
+		visits := api.Group("/link_visits")
+		{
+			visits.GET("", linkHandler.ListLinkVisits)
+			visits.DELETE("/:id", linkHandler.DeleteLinkVisit)
+		}
 	}
 
 	router.GET("/r/:code", linkHandler.RedirectToOriginalURL)

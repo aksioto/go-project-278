@@ -111,6 +111,7 @@ Minimum required environment variables (see `.env.sample` for the full list and 
 | `/api/links` | `GET` | List links (supports `range` query) |
 | `/api/links/:id` | `GET/PUT/DELETE` | Get, update, delete link |
 | `/api/link_visits` | `GET` | List visits with pagination |
+| `/api/link_visits/:id` | `DELETE` | Delete visit by ID |
 | `/r/:code` | `GET` | Redirect to original URL |
 | `/ping` | `GET` | Health check |
 

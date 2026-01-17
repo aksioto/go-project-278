@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -11,6 +12,7 @@ import (
 	"code/internal/transport/http/mapper"
 	"code/internal/transport/http/validation"
 	linkusecase "code/internal/usecase/link"
+	visitusecase "code/internal/usecase/visit"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,21 +28,30 @@ type paginationRange struct {
 }
 
 type LinkHandler struct {
-	service linkusecase.Service
-	baseURL string
+	linkService  linkusecase.Service
+	visitService visitusecase.Service
+	baseURL      string
+	logger       *slog.Logger
 }
 
-func NewLinkHandler(service linkusecase.Service, baseURL string) *LinkHandler {
+func NewLinkHandler(
+	linkService linkusecase.Service,
+	visitService visitusecase.Service,
+	baseURL string,
+	logger *slog.Logger,
+) *LinkHandler {
 	return &LinkHandler{
-		service: service,
-		baseURL: baseURL,
+		linkService:  linkService,
+		visitService: visitService,
+		baseURL:      baseURL,
+		logger:       logger,
 	}
 }
 
 func (h *LinkHandler) parseID(c *gin.Context) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		h.handleError(c, link.ErrInvalidID)
 		return 0, false
 	}
 	return id, true
@@ -56,7 +67,7 @@ func (h *LinkHandler) CreateLink(c *gin.Context) {
 		return
 	}
 
-	domainLink, err := h.service.CreateLink(c.Request.Context(), req.OriginalURL, req.ShortName)
+	domainLink, err := h.linkService.CreateLink(c.Request.Context(), req.OriginalURL, req.ShortName)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -71,7 +82,7 @@ func (h *LinkHandler) GetLink(c *gin.Context) {
 		return
 	}
 
-	domainLink, err := h.service.GetLink(c.Request.Context(), id)
+	domainLink, err := h.linkService.GetLink(c.Request.Context(), id)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -106,9 +117,9 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 	rangeParam := c.Query("range")
 	pRange, err := h.parseRange(rangeParam)
 	if err != nil {
-		total, countErr := h.service.CountLinks(c.Request.Context())
+		total, countErr := h.linkService.CountLinks(c.Request.Context())
 		if countErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": countErr.Error()})
+			h.handleError(c, countErr)
 			return
 		}
 		c.Header("Content-Range", fmt.Sprintf("links */%d", total))
@@ -119,7 +130,7 @@ func (h *LinkHandler) ListLinks(c *gin.Context) {
 	limit := pRange.end - pRange.start + 1
 	offset := pRange.start
 
-	result, err := h.service.ListLinksPaginated(c.Request.Context(), limit, offset)
+	result, err := h.linkService.ListLinksPaginated(c.Request.Context(), limit, offset)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -146,7 +157,7 @@ func (h *LinkHandler) DeleteLinkVisit(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteLinkVisit(c.Request.Context(), id); err != nil {
+	if err := h.visitService.DeleteVisit(c.Request.Context(), id); err != nil {
 		h.handleError(c, err)
 		return
 	}
@@ -158,9 +169,9 @@ func (h *LinkHandler) ListLinkVisits(c *gin.Context) {
 	rangeParam := c.Query("range")
 	pRange, err := h.parseRange(rangeParam)
 	if err != nil {
-		total, countErr := h.service.CountLinkVisits(c.Request.Context())
+		total, countErr := h.visitService.CountVisits(c.Request.Context())
 		if countErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": countErr.Error()})
+			h.handleError(c, countErr)
 			return
 		}
 		c.Header("Content-Range", fmt.Sprintf("link_visits */%d", total))
@@ -171,7 +182,7 @@ func (h *LinkHandler) ListLinkVisits(c *gin.Context) {
 	limit := pRange.end - pRange.start + 1
 	offset := pRange.start
 
-	result, err := h.service.ListLinkVisitsPaginated(c.Request.Context(), limit, offset)
+	result, err := h.visitService.ListVisitsPaginated(c.Request.Context(), limit, offset)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -203,7 +214,7 @@ func (h *LinkHandler) UpdateLink(c *gin.Context) {
 		return
 	}
 
-	domainLink, err := h.service.UpdateLink(c.Request.Context(), id, req.OriginalURL, req.ShortName)
+	domainLink, err := h.linkService.UpdateLink(c.Request.Context(), id, req.OriginalURL, req.ShortName)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -218,7 +229,7 @@ func (h *LinkHandler) DeleteLink(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteLink(c.Request.Context(), id); err != nil {
+	if err := h.linkService.DeleteLink(c.Request.Context(), id); err != nil {
 		h.handleError(c, err)
 		return
 	}
@@ -229,7 +240,7 @@ func (h *LinkHandler) DeleteLink(c *gin.Context) {
 func (h *LinkHandler) RedirectToOriginalURL(c *gin.Context) {
 	code := c.Param("code")
 
-	domainLink, err := h.service.GetLinkByShortName(c.Request.Context(), code)
+	domainLink, err := h.linkService.GetLinkByShortName(c.Request.Context(), code)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -244,9 +255,11 @@ func (h *LinkHandler) RedirectToOriginalURL(c *gin.Context) {
 		Status:    status,
 	}
 
-	if _, err := h.service.CreateLinkVisit(c.Request.Context(), visit); err != nil {
-		h.handleError(c, err)
-		return
+	if _, err := h.visitService.CreateVisit(c.Request.Context(), visit); err != nil {
+		h.logger.Error("failed to record visit",
+			slog.Any("error", err),
+			slog.Int64("link_id", domainLink.ID),
+		)
 	}
 
 	c.Redirect(status, domainLink.OriginalURL)

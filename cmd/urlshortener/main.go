@@ -16,6 +16,7 @@ import (
 	"code/internal/transport/http/middleware"
 	"code/internal/transport/http/validation"
 	linkusecase "code/internal/usecase/link"
+	visitusecase "code/internal/usecase/visit"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/gin-gonic/gin"
@@ -75,10 +76,11 @@ func main() {
 
 	logger.Info("database connected")
 
-	// Init repositories + usecase
+	// Init repositories + usecases
 	linkRepo := repository.NewLinkPostgres(dbPool)
 	visitRepo := repository.NewVisitPostgres(dbPool)
-	linkService := linkusecase.NewService(linkRepo, visitRepo, logger)
+	linkService := linkusecase.NewService(linkRepo, logger)
+	visitService := visitusecase.NewService(visitRepo, logger)
 
 	// Setup Gin router + middleware
 	if cfg.IsProd() {
@@ -100,7 +102,7 @@ func main() {
 	// Healthcheck
 	router.GET("/ping", handler.PingHandler)
 
-	transportHTTP.SetupRoutes(router, linkService, cfg.BaseURL)
+	transportHTTP.SetupRoutes(router, linkService, visitService, cfg.BaseURL, logger)
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 	logger.Info("starting server", slog.String("addr", addr))
