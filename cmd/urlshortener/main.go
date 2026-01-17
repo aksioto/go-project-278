@@ -79,7 +79,7 @@ func main() {
 	// Init repositories + usecases
 	linkRepo := repository.NewLinkPostgres(dbPool)
 	visitRepo := repository.NewVisitPostgres(dbPool)
-	linkService := linkusecase.NewService(linkRepo, logger)
+	linkService := linkusecase.NewService(linkRepo, logger, cfg.BaseURL)
 	visitService := visitusecase.NewService(visitRepo, logger)
 
 	// Setup Gin router + middleware
@@ -102,7 +102,7 @@ func main() {
 	// Healthcheck
 	router.GET("/ping", handler.PingHandler)
 
-	transportHTTP.SetupRoutes(router, linkService, visitService, cfg.BaseURL, logger)
+	transportHTTP.SetupRoutes(router, linkService, visitService, cfg.BaseURL.String(), logger)
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 	logger.Info("starting server", slog.String("addr", addr))

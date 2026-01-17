@@ -38,6 +38,13 @@ func handleError(c *gin.Context, err error) {
 		return
 	}
 
+	if errors.Is(err, link.ErrInvalidOriginalURL) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"errors": map[string]string{"original_url": "cannot shorten own short URLs"},
+		})
+		return
+	}
+
 	if errors.Is(err, link.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
 		return

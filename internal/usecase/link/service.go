@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -40,18 +41,24 @@ type Service interface {
 type service struct {
 	linkRepo link.LinkRepository
 	logger   *slog.Logger
+	baseURL  *url.URL
 }
 
 var _ Service = (*service)(nil)
 
-func NewService(linkRepo link.LinkRepository, logger *slog.Logger) *service {
+func NewService(linkRepo link.LinkRepository, logger *slog.Logger, baseURL *url.URL) *service {
 	return &service{
 		linkRepo: linkRepo,
 		logger:   logger,
+		baseURL:  baseURL,
 	}
 }
 
 func (s *service) CreateLink(ctx context.Context, originalURL, shortName string) (*link.Link, error) {
+	if s.isOwnShortURL(originalURL) {
+		return nil, link.ErrInvalidOriginalURL
+	}
+
 	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
 	defer cancel()
 
@@ -122,6 +129,10 @@ func (s *service) ListLinksPaginated(ctx context.Context, limit, offset int32) (
 }
 
 func (s *service) UpdateLink(ctx context.Context, id int64, originalURL, shortName string) (*link.Link, error) {
+	if s.isOwnShortURL(originalURL) {
+		return nil, link.ErrInvalidOriginalURL
+	}
+
 	dbCtx, cancel := context.WithTimeout(ctx, defaultDBTimeout)
 	defer cancel()
 	return s.linkRepo.Update(dbCtx, id, originalURL, shortName)
@@ -150,4 +161,17 @@ func (s *service) generateShortName() (string, error) {
 		encoded = encoded[:8]
 	}
 	return encoded, nil
+}
+
+func (s *service) isOwnShortURL(rawURL string) bool {
+	if s.baseURL == nil {
+		return false
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+
+	return u.Host == s.baseURL.Host && strings.HasPrefix(u.Path, "/r/")
 }

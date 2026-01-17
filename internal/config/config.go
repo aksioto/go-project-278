@@ -2,7 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"net/url"
 
 	"github.com/caarlos0/env/v10"
 	"github.com/joho/godotenv"
@@ -18,9 +20,10 @@ type Config struct {
 	ServiceName string `env:"SERVICE_NAME,required"`
 	AppVersion  string `env:"APP_VERSION,required"`
 
-	Port    string `env:"PORT" envDefault:"80"`
-	AppPort string `env:"APP_PORT" envDefault:"8080"`
-	BaseURL string `env:"BASE_URL,required"`
+	Port       string `env:"PORT" envDefault:"80"`
+	AppPort    string `env:"APP_PORT" envDefault:"8080"`
+	RawBaseURL string `env:"BASE_URL,required"`
+	BaseURL    *url.URL
 
 	AllowedOrigins []string `env:"ALLOWED_ORIGINS" envDefault:"http://localhost:5173" envSeparator:","`
 
@@ -43,11 +46,21 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	parsedURL, err := url.Parse(cfg.RawBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid BASE_URL %q: %w", cfg.RawBaseURL, err)
+	}
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("BASE_URL must include scheme and host, got %q", cfg.RawBaseURL)
+	}
+
+	cfg.BaseURL = parsedURL
+
 	return &cfg, nil
 }
 
 func (c *Config) Validate() error {
-	if c.Env == "prod" && c.SentryDSN == "" {
+	if c.Env == EnvProd && c.SentryDSN == "" {
 		return errors.New("SENTRY_DSN is required in prod")
 	}
 	return nil

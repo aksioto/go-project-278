@@ -78,6 +78,14 @@ func TestErrorsMiddleware(t *testing.T) {
 			expectedBody:   `{"errors":{"short_name":"short name already in use"}}`,
 		},
 		{
+			name: "invalid original url error",
+			setupHandler: func(c *gin.Context) {
+				_ = c.Error(link.ErrInvalidOriginalURL)
+			},
+			expectedStatus: http.StatusUnprocessableEntity,
+			expectedBody:   `{"errors":{"original_url":"cannot shorten own short URLs"}}`,
+		},
+		{
 			name: "internal server error",
 			setupHandler: func(c *gin.Context) {
 				_ = c.Error(errors.New("unexpected error"))

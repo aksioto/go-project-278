@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/url"
 	"testing"
 	"time"
 
@@ -23,7 +24,21 @@ type testEnv struct {
 	linkRepo *link.MockLinkRepository
 }
 
+const testBaseURL = "https://example.com"
+
 func setupTestEnv(t *testing.T) *testEnv {
+	return setupTestEnvWithBaseURL(t, testBaseURL)
+}
+
+func mustParseBaseURL(t *testing.T, base string) *url.URL {
+	t.Helper()
+
+	parsed, err := url.Parse(base)
+	require.NoError(t, err)
+	return parsed
+}
+
+func setupTestEnvWithBaseURL(t *testing.T, baseURL string) *testEnv {
 	t.Helper()
 
 	ctrl := testutil.NewController(t)
@@ -31,7 +46,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	return &testEnv{
-		svc:      NewService(linkRepo, logger),
+		svc:      NewService(linkRepo, logger, mustParseBaseURL(t, baseURL)),
 		linkRepo: linkRepo,
 	}
 }
@@ -489,4 +504,70 @@ func TestService_CountLinks(t *testing.T) {
 			assert.Equal(t, tt.wantCount, count)
 		})
 	}
+}
+
+func TestService_CreateLink_RejectsOwnShortURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		baseURL     string
+		originalURL string
+		wantErr     error
+	}{
+		{
+			name:        "rejects own short url",
+			baseURL:     "https://example.com",
+			originalURL: "https://example.com/r/link1",
+			wantErr:     link.ErrInvalidOriginalURL,
+		},
+		{
+			name:        "rejects own short url with path",
+			baseURL:     "https://example.com",
+			originalURL: "https://example.com/r/abc123",
+			wantErr:     link.ErrInvalidOriginalURL,
+		},
+		{
+			name:        "allows external url",
+			baseURL:     "https://example.com",
+			originalURL: "https://google.com",
+			wantErr:     nil,
+		},
+		{
+			name:        "allows same host but different path",
+			baseURL:     "https://example.com",
+			originalURL: "https://example.com/api/docs",
+			wantErr:     nil,
+		},
+		{
+			name:        "allows different subdomain",
+			baseURL:     "https://example.com",
+			originalURL: "https://api.example.com/r/link1",
+			wantErr:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := setupTestEnvWithBaseURL(t, tt.baseURL)
+
+			if tt.wantErr == nil {
+				env.linkRepo.EXPECT().Create(gomock.Any(), tt.originalURL, "test").Return(makeTestLink(1, tt.originalURL, "test"), nil)
+			}
+
+			_, err := env.svc.CreateLink(context.Background(), tt.originalURL, "test")
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestService_UpdateLink_RejectsOwnShortURL(t *testing.T) {
+	env := setupTestEnvWithBaseURL(t, "https://example.com")
+
+	_, err := env.svc.UpdateLink(context.Background(), 1, "https://example.com/r/link1", "test")
+
+	require.ErrorIs(t, err, link.ErrInvalidOriginalURL)
 }
